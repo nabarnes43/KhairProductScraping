@@ -1,0 +1,31 @@
+#Logs
+#Chekponts TODO
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# React/Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# VS Code
+.vscode/
+
+# AI/ML
+*.h5
+*.pkl
+*.model
+
+# Data
+*.csv
+*.xlsx
+/data/
+
+# Scraped data cache
+cache/
