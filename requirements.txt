@@ -1,0 +1,9 @@
+# Web Scraping
+scrapy>=2.7.0
+rapidfuzz>=2.13.0
+
+# Monitoring
+psutil>=5.9.0
+
+# Custom cache functionality
+# Note: json_file_cache appears to be a custom module so it's not included in pip requirements
