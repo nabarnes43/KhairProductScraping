@@ -5,7 +5,7 @@ class JsonFileCache:
     Tracks different types of cache hits (matched vs. unmatched products).
     """
     
-    def __init__(self, cache_file="product_cache.json", save_frequency=25):
+    def __init__(self, cache_file="product_cache.json", save_frequency=500):
         """
         Initialize the file-based cache.
         
@@ -32,7 +32,7 @@ class JsonFileCache:
         
         if os.path.exists(self.cache_file):
             try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                with open(self.cache_file, 'r', encoding='utf-8', buffering=16777216) as f:
                     cache_data = json.load(f)
                     
                 # Extract products and stats

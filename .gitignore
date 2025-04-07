@@ -8,6 +8,7 @@ __pycache__/
 venv/
 env/
 .env
+.scrapy/
 
 # React/Node
 node_modules/
