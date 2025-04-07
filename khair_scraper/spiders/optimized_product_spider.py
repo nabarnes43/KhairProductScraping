@@ -527,10 +527,244 @@ class OptimizedProductSpider(scrapy.Spider):
         Returns:
             dict: Product data dictionary
         """
-        # Additional parsing code would go here
-        # This should include all the extraction logic for product details
-        pass
+        product_url = response.meta.get('product_url', response.url)
+        self.log_custom(f"Parsing product page: {product_url}")
         
+        try:
+            # Initialize an empty product_data dictionary
+            product_data = {}
+            
+            # Extract product name and brand
+            product_name = response.css('span#product-title::text').get()
+            brand = response.css('span#product-brand-title a::text').get()
+            
+            # Process brand and name for full product name first (used for matching)
+            if brand and product_name:
+                brand = brand.strip()
+                product_name = product_name.strip()
+                full_name = f"{brand} {product_name}"
+                
+                # Set full_name as first field
+                product_data['full_name'] = full_name
+                
+                # Set brand as second field
+                product_data['brand'] = brand
+                
+                # Set name as third field
+                product_data['name'] = product_name
+                
+                # Try fuzzy matching with Skinsort data
+                is_match, matched_name = self.check_fuzzy_match(full_name)
+            else:
+                # Handle case where name or brand is missing
+                if brand:
+                    product_data['brand'] = brand.strip()
+                if product_name:
+                    product_data['name'] = product_name.strip()
+                is_match = False
+                matched_name = None
+            
+            # Extract product description (fourth field)
+            product_description = response.css('span#product-details::text').get()
+            if product_description:
+                product_description = product_description.strip()
+                product_data['description'] = product_description
+            
+            # Add URL (fifth field)
+            product_data['url'] = product_url
+            
+            # Extract product image (sixth field)
+            product_image = response.css('div.image img::attr(src)').get()
+            if product_image:
+                product_data['image_url'] = product_image
+                self.log_custom(f"Found product image: {product_image}")
+                
+                # Try to get high resolution image if available
+                if '@' in product_image:
+                    # Extract base URL without the size modifier
+                    base_img_url = product_image.split('@')[0]
+                    # Get original/high-resolution version
+                    product_data['high_res_image_url'] = f"{base_img_url}_original.jpeg"
+                    self.log_custom(f"Created high-res image URL: {product_data['high_res_image_url']}")
+            
+            # Set matched status (seventh field)
+            if 'full_name' in product_data:
+                if is_match:
+                    self.log_custom(f"Found match for: {product_data['full_name']} -> {matched_name}")
+                    product_data['matched'] = True
+                    product_data['matched_name'] = matched_name
+                    product_data['category'] = self.product_categories.get(matched_name, '') if hasattr(self, 'product_categories') else ''
+                    
+                    # Increment matched count
+                    self.matched_count += 1
+                else:
+                    product_data['matched'] = False
+                    self.log_custom(f"No match found for: {product_data['full_name']}")
+            else:
+                product_data['matched'] = False
+
+            # Extract ingredients table data (eighth field)
+            ingredients_data = []
+
+            # Find the ingredients table using the correct selector
+            ingredients_table = response.css('div#ingredlist-table-section table.product-skim')
+            
+            if ingredients_table:
+                self.log_custom("Found ingredients table")
+                
+                # Get all rows from the table body
+                rows = ingredients_table.css('tbody tr')
+                
+                self.log_custom(f"Found {len(rows)} ingredient rows in table")
+                
+                # Filter out duplicate ingredients that might appear in both mobile and desktop versions
+                processed_ingredients = set()
+                
+                for row in rows:
+                    ingredient = {}
+                    
+                    # Extract ingredient name and link
+                    name_cell = row.css('td:nth-child(1)')
+                    ingredient_link = name_cell.css('a::attr(href)').get()
+                    name = name_cell.css('a::text').get()
+                    
+                    if name:
+                        ingredient['name'] = name.strip()
+                        
+                    if ingredient_link:
+                        ingredient['ingredient_link'] = response.urljoin(ingredient_link)
+                    
+                    # Extract what it does
+                    what_it_does_cell = row.css('td:nth-child(2)')
+                    what_it_does_links = what_it_does_cell.css('a::text').getall()
+                    
+                    if what_it_does_links:
+                        ingredient['what_it_does'] = [wid.strip() for wid in what_it_does_links if wid.strip()]
+                    
+                    # Extract irritancy rating
+                    irritancy_cell = row.css('td:nth-child(3)')
+                    
+                    # Get all spans with title attributes containing "irritancy" or "comedogenicity"
+                    irritancy_spans = irritancy_cell.css('span[title*="irritancy"]')
+                    comedogenicity_spans = irritancy_cell.css('span[title*="comedogenicity"]')
+                    
+                    # Track the multiple values we might find
+                    irritancy_values = []
+                    comedogenicity_values = []
+                    
+                    # Process irritancy values
+                    if irritancy_spans:
+                        for span in irritancy_spans:
+                            title_attr = span.attrib.get('title', '')
+                            
+                            try:
+                                # Format is 'irritancy: X' where X is the value
+                                value = title_attr.split(':')[1].strip()
+                                irritancy_values.append(value)
+                            except:
+                                self.log_custom("Error extracting irritancy value from title", logging.WARNING)
+                        
+                        # Store all values in the ingredient dictionary
+                        if irritancy_values:
+                            ingredient['irritancy_values'] = irritancy_values
+                            
+                    # Process comedogenicity values
+                    if comedogenicity_spans:
+                        for span in comedogenicity_spans:
+                            title_attr = span.attrib.get('title', '')
+                            
+                            try:
+                                # Format is 'comedogenicity: X' where X is the value
+                                value = title_attr.split(':')[1].strip()
+                                comedogenicity_values.append(value)
+                            except:
+                                self.log_custom("Error extracting comedogenicity value from title", logging.WARNING)
+                        
+                        # Store all values in the ingredient dictionary
+                        if comedogenicity_values:
+                            ingredient['comedogenicity_values'] = comedogenicity_values
+                    
+                    # Extract ID/Rating
+                    id_rating_cell = row.css('td:nth-child(4)')
+                    id_rating = id_rating_cell.css('span.our-take::text').get()
+                    if id_rating:
+                        ingredient['id_rating'] = id_rating.strip()
+                    
+                    # Check if this ingredient has a valid name and hasn't been processed yet
+                    # This helps avoid duplicates from mobile/desktop version rows
+                    if ingredient.get('name') and ingredient['name'] not in processed_ingredients:
+                        ingredients_data.append(ingredient)
+                        processed_ingredients.add(ingredient['name'])
+                
+                product_data['ingredients'] = ingredients_data
+                self.log_custom(f"Extracted {len(ingredients_data)} unique ingredients")
+            else:
+                self.log_custom("No ingredients table found on this page")
+                product_data['ingredients'] = []
+            
+            # Add timestamp after all the requested fields
+            product_data['timestamp'] = datetime.now().isoformat()
+            
+            # Try to extract product highlights if available
+            highlights = []
+            highlight_section = response.css('div#ingredlist-highlights-section')
+            if highlight_section:
+                # Extract hashtags
+                hashtags = highlight_section.css('span.hashtag::text').getall()
+                if hashtags:
+                    product_data['hashtags'] = [tag.strip() for tag in hashtags if tag.strip()]
+                    
+                # Extract key ingredients by function
+                key_functions = highlight_section.css('div.ingredlist-by-function-block div')
+                for func_div in key_functions:
+                    func_name = func_div.css('span.bold a::text').get()
+                    if func_name:
+                        func_name = func_name.strip()
+                        ingred_names = func_div.css('span:not(.bold) a::text').getall()
+                        if ingred_names:
+                            ingred_names = [name.strip() for name in ingred_names if name.strip()]
+                            highlights.append({
+                                'function': func_name,
+                                'ingredients': ingred_names
+                            })
+                
+                if highlights:
+                    product_data['highlights'] = highlights
+            
+            # Add to product batch
+            self.product_batch.append(product_data)
+            
+            # Save to cache if enabled
+            if self.use_cache:
+                self.product_cache.add_product(product_data)
+            
+            # Save batch if it reaches the specified size
+            if len(self.product_batch) >= self.batch_size:
+                self.save_batch()
+            
+            return product_data
+            
+        except Exception as e:
+            self.log_custom(f"Error parsing product page: {str(e)}", logging.ERROR)
+            self.log_custom(f"Traceback: {traceback.format_exc()}", logging.ERROR)
+            
+            # Create minimal product data for error case
+            error_data = {
+                'url': product_url,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'matched': False
+            }
+            
+            # Still add to batch to track errors
+            self.product_batch.append(error_data)
+            
+            # Save to cache if enabled
+            if self.use_cache:
+                self.product_cache.add_product(error_data)
+                
+            return error_data
+
     def closed(self, reason):
         """
         Handle spider closure with proper cleanup.

@@ -8,14 +8,14 @@ from datetime import datetime
 
 # Global configuration (can be overridden via command line args)
 CONFIG = {
-    "SKINSORT_JSON": "skinsort_shampoos.json",  # Reference product list
+    "SKINSORT_JSON": "all_products.json",  # Reference product list
     "CHECKPOINT_FILE": "spider_checkpoint.pkl",  # Checkpoint for resuming
-    "CACHE_FILE": "product_cache.json",         # Cache file in root directory
+    "CACHE_FILE": "new_cache.json",         # Cache file in root directory
     "PAGES_PER_BATCH": 20,                      # Pages to crawl before pausing
     "TOTAL_PAGES": 3094,                        # Total pages to crawl
     "PAUSE_MINUTES": 0,                         # Pause duration between batches
-    "SIMILARITY_THRESHOLD": 95,                 # Matching threshold
-    "BATCH_SIZE": 1,                            # Products per output batch
+    "SIMILARITY_THRESHOLD": 90,                 # Matching threshold
+    "BATCH_SIZE": 20,                         # Products per output batch scales with pages per batch 50 products per page
     "OUTPUT_DIR": f'products_{datetime.now().strftime("%Y%m%d_%H%M%S")}',  # Timestamped output dir
     "RESOURCE_CHECK_ENABLED": True,             # Monitor system resources
     "MAX_MEMORY_PERCENT": 90,                   # Max memory usage before pause
