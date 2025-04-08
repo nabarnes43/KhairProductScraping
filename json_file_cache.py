@@ -75,16 +75,16 @@ class JsonFileCache:
             
             # Prepare complete cache data including enhanced stats
             cache_data = {
-                'products': self.products,
-                'hits': self.hits,
-                'matched_hits': self.matched_hits,
-                'unmatched_hits': self.unmatched_hits,
-                'misses': self.misses,
                 'cache_info': {
                     'size': len(self.products),
                     'matched_count': matched_count,
                     'last_saved': self._get_timestamp()
-                }
+                },
+                'hits': self.hits,
+                'matched_hits': self.matched_hits,
+                'unmatched_hits': self.unmatched_hits,
+                'misses': self.misses,
+                'products': self.products
             }
             
             # Write to a temporary file first

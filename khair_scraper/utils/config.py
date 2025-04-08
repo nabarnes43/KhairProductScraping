@@ -19,7 +19,7 @@ CONFIG = {
     # Batch size is 500 so 5000 / 500 = 10 product batches/ json files
     "BATCH_SIZE": 500,                         # Products per output batch scales with pages per batch 50 products per page
     "OUTPUT_DIR": f'products_{datetime.now().strftime("%Y%m%d_%H%M%S")}',  # Timestamped output dir
-    "RESOURCE_CHECK_ENABLED": False,             # Monitor system resources
+    "RESOURCE_CHECK_ENABLED": True,             # Monitor system resources
     "MAX_MEMORY_PERCENT": 90,                   # Max memory usage before pause
     "MAX_DISK_PERCENT": 90,                     # Max disk usage before pause
 }
@@ -27,12 +27,12 @@ CONFIG = {
 # Scrapy spider settings
 SPIDER_SETTINGS = {
     # Concurrency settings
-    'CONCURRENT_REQUESTS': 64,
-    'CONCURRENT_REQUESTS_PER_DOMAIN': 64,
-    'DOWNLOAD_DELAY': 0,
+    'CONCURRENT_REQUESTS': 32,
+    'CONCURRENT_REQUESTS_PER_DOMAIN': 32,
+    'DOWNLOAD_DELAY': 0.5,
     
     # Autothrottle for adaptive rate control
-    'AUTOTHROTTLE_ENABLED': False,
+    'AUTOTHROTTLE_ENABLED': True,
     'AUTOTHROTTLE_START_DELAY': 2,
     'AUTOTHROTTLE_MAX_DELAY': 60,
     'AUTOTHROTTLE_TARGET_CONCURRENCY': 1.0,

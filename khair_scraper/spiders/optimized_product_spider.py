@@ -148,10 +148,9 @@ class OptimizedProductSpider(scrapy.Spider):
             # Handle the last_offset case - This is the critical part
             if 'last_offset' in checkpoint:
                 self.last_offset = checkpoint['last_offset']
-                next_offset = self.last_offset + 1
-                self.start_page = next_offset
-                self.log_custom(f"Resuming from offset {next_offset} (page {next_offset + 1})")
-                self.start_urls = [f'https://incidecoder.com/products/all?offset={next_offset}']
+                self.start_page = self.last_offset  # Set start_page to the last processed offset
+                self.log_custom(f"Resuming from offset {self.last_offset}")
+                self.start_urls = [f'https://incidecoder.com/products/all?offset={self.last_offset}']
             else:
                 self.log_custom("No last_offset found in checkpoint, starting from beginning", logging.WARNING)
             
@@ -300,6 +299,10 @@ class OptimizedProductSpider(scrapy.Spider):
         filename = os.path.join(self.output_dir, f'product_batch_{self.batch_count}.json')
         
         try:
+            # Add batch number to each product
+            for product in self.product_batch:
+                product['batch_number'] = self.batch_count
+            
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(self.product_batch, f, indent=2, ensure_ascii=False)
                 
@@ -385,6 +388,9 @@ class OptimizedProductSpider(scrapy.Spider):
         cached_products = 0
         matched_cached_products = 0
         
+        # Current page number (1-indexed for readability)
+        page_number = current_offset + 1
+        
         for link in filtered_links:
             url = link.attrib['href']
             full_url = response.urljoin(url)
@@ -397,6 +403,9 @@ class OptimizedProductSpider(scrapy.Spider):
             if self.use_cache and self.product_cache.has_product(full_url):
                 cached_product = self.product_cache.get_product(full_url)
                 cached_products += 1
+                
+                # Add page info to cached product
+                cached_product['page_number'] = page_number
                 
                 # OPTION 1: If product was already matched, we can skip requesting entirely
                 if cached_product.get('matched', False):
@@ -445,7 +454,7 @@ class OptimizedProductSpider(scrapy.Spider):
                 full_url,
                 callback=self.parse_product,
                 priority=1,  # Higher priority for product pages
-                meta={'product_url': full_url}
+                meta={'product_url': full_url, 'page_number': page_number}
             )
         
         # Log cache statistics with enhanced metrics
@@ -528,7 +537,9 @@ class OptimizedProductSpider(scrapy.Spider):
             dict: Product data dictionary
         """
         product_url = response.meta.get('product_url', response.url)
-        self.log_custom(f"Parsing product page: {product_url}")
+        page_number = response.meta.get('page_number', 0)
+        
+        self.log_custom(f"Parsing product page: {product_url} (page {page_number})")
         
         try:
             # Initialize an empty product_data dictionary
@@ -570,10 +581,13 @@ class OptimizedProductSpider(scrapy.Spider):
                 product_description = product_description.strip()
                 product_data['description'] = product_description
             
-            # Add URL (fifth field)
+            # Add page tracking information as the fifth field (right after description)
+            product_data['page_number'] = page_number
+            
+            # Add URL (sixth field)
             product_data['url'] = product_url
             
-            # Extract product image (sixth field)
+            # Extract product image (seventh field)
             product_image = response.css('div.image img::attr(src)').get()
             if product_image:
                 product_data['image_url'] = product_image
@@ -587,7 +601,7 @@ class OptimizedProductSpider(scrapy.Spider):
                     product_data['high_res_image_url'] = f"{base_img_url}_original.jpeg"
                     self.log_custom(f"Created high-res image URL: {product_data['high_res_image_url']}")
             
-            # Set matched status (seventh field)
+            # Set matched status (eighth field)
             if 'full_name' in product_data:
                 if is_match:
                     self.log_custom(f"Found match for: {product_data['full_name']} -> {matched_name}")
@@ -603,7 +617,7 @@ class OptimizedProductSpider(scrapy.Spider):
             else:
                 product_data['matched'] = False
 
-            # Extract ingredients table data (eighth field)
+            # Extract ingredients table data (ninth field)
             ingredients_data = []
 
             # Find the ingredients table using the correct selector
@@ -753,7 +767,9 @@ class OptimizedProductSpider(scrapy.Spider):
                 'url': product_url,
                 'error': str(e),
                 'timestamp': datetime.now().isoformat(),
-                'matched': False
+                'matched': False,
+                'page_number': response.meta.get('page_number', 0),
+                'batch_number': response.meta.get('batch_number', 0)
             }
             
             # Still add to batch to track errors
@@ -796,6 +812,9 @@ class OptimizedProductSpider(scrapy.Spider):
                 'total_products': self.product_count,
                 'matched_products': self.matched_count,
                 'match_ratio': match_ratio,
+                'total_batches': self.batch_count,
+                'products_per_batch': self.batch_size,
+                'last_page_processed': self.last_offset + 1,  # Add 1 to make it human-readable
                 'start_time': getattr(self, 'start_time', None),
                 'end_time': datetime.now().isoformat(),
                 'reason': reason
